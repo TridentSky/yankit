@@ -119,12 +119,30 @@ class Downloader {
         });
     }
 
-    startDownload({ url, qualityId, title, thumbnail }) {
-        // Validate URL
+    checkExists(title) {
+        const settings = this.loadSettings();
+        let outDir = settings.downloadPath || path.join(os.homedir(), 'Downloads');
+        if (!path.isAbsolute(outDir)) outDir = path.join(os.homedir(), 'Downloads');
+        if (!title || !fs.existsSync(outDir)) return null;
+        try {
+            for (const f of fs.readdirSync(outDir)) {
+                const name = path.basename(f, path.extname(f));
+                if (name === title) return f;
+            }
+        } catch {}
+        return null;
+    }
+
+    startDownload({ url, qualityId, title, thumbnail, replace }) {
         try {
             const u = new URL(url);
             if (!['http:', 'https:'].includes(u.protocol)) throw new Error();
         } catch { return null; }
+
+        if (!replace && title) {
+            const existing = this.checkExists(title);
+            if (existing) return { exists: true, filename: existing };
+        }
 
         const id = crypto.randomUUID().slice(0, 8);
         const settings = this.loadSettings();
@@ -137,6 +155,8 @@ class Downloader {
             '--newline', '--no-playlist',
             '-o', path.join(outDir, '%(title)s.%(ext)s'),
         ];
+
+        if (replace) args.push('--force-overwrites');
 
         if (qualityId === 'best') {
             args.push('-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best');
@@ -167,15 +187,20 @@ class Downloader {
 
         let buf = '';
         proc.stdout.on('data', data => {
-            if (dl.status === 'cancelled') return;
             buf += data.toString();
             if (buf.length > 20000) buf = buf.slice(-10000);
             const lines = buf.split('\n');
             buf = lines.pop();
             for (const line of lines) {
-                if (line.trim()) this._parseLine(line.trim(), dl);
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                if (trimmed.includes('Destination:') || trimmed.includes('[Merger]') || trimmed.includes('[ExtractAudio]')) {
+                    this._parseFileLine(trimmed, dl);
+                }
+                if (dl.status === 'cancelled') continue;
+                this._parseLine(trimmed, dl);
             }
-            this.onUpdate(dl);
+            if (dl.status !== 'cancelled') this.onUpdate(dl);
         });
 
         proc.stderr.on('data', data => {
@@ -259,6 +284,24 @@ class Downloader {
         this.processes.clear();
     }
 
+    _trackFile(fp, dl) {
+        if (fp && !dl.trackedFiles.includes(fp)) dl.trackedFiles.push(fp);
+        dl.filepath = fp;
+        dl.filename = path.basename(fp);
+    }
+
+    _parseFileLine(line, dl) {
+        if (line.includes('[download] Destination:')) {
+            this._trackFile(line.split('Destination:')[1].trim(), dl);
+        } else if (line.includes('[Merger]')) {
+            const m = line.match(/"([^"]+)"/);
+            if (m) this._trackFile(m[1], dl);
+        } else if (line.includes('[ExtractAudio]')) {
+            const m = line.match(/Destination:\s*(.+)/);
+            if (m) this._trackFile(m[1].trim(), dl);
+        }
+    }
+
     _parseLine(line, dl) {
         if (line.includes('[download]') && line.includes('%')) {
             dl.status = 'downloading';
@@ -284,31 +327,14 @@ class Downloader {
                     dl.eta = 0;
                 }
             }
-        } else if (line.includes('[download] Destination:')) {
-            const fp = line.split('Destination:')[1].trim();
-            dl.filepath = fp;
-            dl.filename = path.basename(fp);
-            if (!dl.trackedFiles.includes(fp)) dl.trackedFiles.push(fp);
         } else if (line.includes('[Merger]')) {
             dl.status = 'merging';
             dl.progress = 100;
             dl.eta = 0;
-            const m = line.match(/"([^"]+)"/);
-            if (m) {
-                dl.filepath = m[1];
-                dl.filename = path.basename(m[1]);
-                if (!dl.trackedFiles.includes(m[1])) dl.trackedFiles.push(m[1]);
-            }
         } else if (line.includes('[ExtractAudio]')) {
             dl.status = 'converting';
             dl.progress = 100;
             dl.eta = 0;
-            const m = line.match(/Destination:\s*(.+)/);
-            if (m) {
-                dl.filepath = m[1].trim();
-                dl.filename = path.basename(dl.filepath);
-                if (!dl.trackedFiles.includes(dl.filepath)) dl.trackedFiles.push(dl.filepath);
-            }
         } else if (line.includes('has already been downloaded')) {
             dl.status = 'completed';
             dl.progress = 100;
@@ -329,32 +355,37 @@ class Downloader {
         const doClean = () => {
             const files = [...(dl.trackedFiles || [])];
             if (dl.filepath && !files.includes(dl.filepath)) files.push(dl.filepath);
+
+            const dirsScanned = new Set();
             for (const fp of files) {
                 for (const f of [fp, fp + '.part', fp + '.ytdl']) {
                     try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch {}
                 }
                 const dir = path.dirname(fp);
-                const base = path.basename(fp, path.extname(fp));
-                try {
-                    for (const f of fs.readdirSync(dir)) {
-                        if (f.startsWith(base) && (f.endsWith('.part') || f.endsWith('.ytdl'))) {
-                            try { fs.unlinkSync(path.join(dir, f)); } catch {}
-                        }
-                    }
-                } catch {}
+                if (!dirsScanned.has(dir)) {
+                    dirsScanned.add(dir);
+                    const base = path.basename(fp, path.extname(fp));
+                    this._cleanDir(dir, base);
+                }
             }
-            if (files.length === 0 && dl.outDir && dl.title && dl.title !== 'Unknown') {
-                try {
-                    for (const f of fs.readdirSync(dl.outDir)) {
-                        if (f.startsWith(dl.title) && (f.endsWith('.part') || f.endsWith('.ytdl'))) {
-                            try { fs.unlinkSync(path.join(dl.outDir, f)); } catch {}
-                        }
-                    }
-                } catch {}
+
+            if (dl.outDir && dl.title && dl.title !== 'Unknown' && !dirsScanned.has(dl.outDir)) {
+                this._cleanDir(dl.outDir, dl.title);
             }
         };
         doClean();
-        setTimeout(doClean, 1500);
+        setTimeout(doClean, 2000);
+        setTimeout(doClean, 5000);
+    }
+
+    _cleanDir(dir, prefix) {
+        try {
+            for (const f of fs.readdirSync(dir)) {
+                if (f.startsWith(prefix) && (f.endsWith('.part') || f.endsWith('.ytdl') || f.includes('.part-Frag'))) {
+                    try { fs.unlinkSync(path.join(dir, f)); } catch {}
+                }
+            }
+        } catch {}
     }
 }
 

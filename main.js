@@ -186,7 +186,11 @@ ipcMain.handle('fetch-info', async (_, url) => {
 });
 
 ipcMain.handle('start-download', (_, data) => {
-    try { return { downloadId: dl.startDownload(data) }; }
+    try {
+        const result = dl.startDownload(data);
+        if (result && result.exists) return result;
+        return { downloadId: result };
+    }
     catch (e) { return { error: e.message || 'Download failed' }; }
 });
 

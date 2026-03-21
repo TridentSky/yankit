@@ -303,13 +303,19 @@ fetchBtn.addEventListener('click', async () => {
 
 downloadBtn.addEventListener('click', async () => {
     if (!currentInfo) return;
-    const result = await yankitApi.startDownload({
+    const data = {
         url: currentInfo.url,
         qualityId: qualitySelect.value,
         title: currentInfo.title,
         thumbnail: currentInfo.thumbnail,
-    });
-    if (result.downloadId) {
+    };
+    let result = await yankitApi.startDownload(data);
+    if (result && result.exists) {
+        if (!confirm(`"${result.filename}" already exists.\nDo you want to replace it?`)) return;
+        data.replace = true;
+        result = await yankitApi.startDownload(data);
+    }
+    if (result && result.downloadId) {
         videoPreview.classList.add('hidden');
         urlInput.value = '';
         urlInput.dispatchEvent(new Event('input'));

@@ -116,9 +116,12 @@ const server = http.createServer(async (req, res) => {
                 case '/api/fetch-info':
                     json(res, await dl.fetchInfo(body.url));
                     return;
-                case '/api/start-download':
-                    json(res, { downloadId: dl.startDownload(body) });
+                case '/api/start-download': {
+                    const r = dl.startDownload(body);
+                    if (r && r.exists) { json(res, r); return; }
+                    json(res, { downloadId: r });
                     return;
+                }
                 case '/api/cancel-download':
                     dl.cancelDownload(body.id);
                     json(res, { ok: true });
