@@ -157,7 +157,7 @@ class Downloader {
             id, title: title || 'Unknown', thumbnail: thumbnail || '',
             status: 'starting', progress: 0, speed: '', eta: 0,
             filename: '', filepath: '', error: '',
-            quality: qualityId, trackedFiles: [],
+            quality: qualityId, trackedFiles: [], outDir,
         };
         this.downloads.set(id, dl);
         this.onUpdate(dl);
@@ -326,12 +326,35 @@ class Downloader {
 
     _cleanup(dl) {
         if (!dl) return;
-        const files = [...(dl.trackedFiles || [])];
-        if (dl.filepath && !files.includes(dl.filepath)) files.push(dl.filepath);
-        for (const fp of files) {
-            try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch {}
-            try { if (fs.existsSync(fp + '.part')) fs.unlinkSync(fp + '.part'); } catch {}
-        }
+        const doClean = () => {
+            const files = [...(dl.trackedFiles || [])];
+            if (dl.filepath && !files.includes(dl.filepath)) files.push(dl.filepath);
+            for (const fp of files) {
+                for (const f of [fp, fp + '.part', fp + '.ytdl']) {
+                    try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch {}
+                }
+                const dir = path.dirname(fp);
+                const base = path.basename(fp, path.extname(fp));
+                try {
+                    for (const f of fs.readdirSync(dir)) {
+                        if (f.startsWith(base) && (f.endsWith('.part') || f.endsWith('.ytdl'))) {
+                            try { fs.unlinkSync(path.join(dir, f)); } catch {}
+                        }
+                    }
+                } catch {}
+            }
+            if (files.length === 0 && dl.outDir && dl.title && dl.title !== 'Unknown') {
+                try {
+                    for (const f of fs.readdirSync(dl.outDir)) {
+                        if (f.startsWith(dl.title) && (f.endsWith('.part') || f.endsWith('.ytdl'))) {
+                            try { fs.unlinkSync(path.join(dl.outDir, f)); } catch {}
+                        }
+                    }
+                } catch {}
+            }
+        };
+        doClean();
+        setTimeout(doClean, 1500);
     }
 }
 
