@@ -1,6 +1,8 @@
 node_modules/
 bin/
 dist/
+installer-out/
 downloads/
 settings.json
+*.exe
 *.log

@@ -35,7 +35,7 @@ function createWebApi() {
     };
 }
 
-const api = window.api || createWebApi();
+const yankitApi = window.api || createWebApi();
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
@@ -213,9 +213,9 @@ downloadsList.addEventListener('click', (e) => {
     const action = btn.dataset.action;
     const id = btn.dataset.id;
 
-    if (action === 'cancel') api.cancelDownload(id);
+    if (action === 'cancel') yankitApi.cancelDownload(id);
     if (action === 'remove') {
-        api.removeDownload(id);
+        yankitApi.removeDownload(id);
         downloads.delete(id);
         const card = downloadsList.querySelector(`[data-id="${id}"]`);
         if (card) card.remove();
@@ -224,8 +224,8 @@ downloadsList.addEventListener('click', (e) => {
     if (action === 'open' || action === 'folder') {
         const dl = downloads.get(id);
         if (dl && dl.filepath) {
-            if (action === 'open') api.openFile(dl.filepath);
-            else api.showInFolder(dl.filepath);
+            if (action === 'open') yankitApi.openFile(dl.filepath);
+            else yankitApi.showInFolder(dl.filepath);
         }
     }
 });
@@ -271,7 +271,7 @@ fetchBtn.addEventListener('click', async () => {
     resetPreview();
     fetchLoading.classList.remove('hidden');
     fetchBtn.disabled = true;
-    const result = await api.fetchInfo(url);
+    const result = await yankitApi.fetchInfo(url);
     fetchLoading.classList.add('hidden');
     fetchBtn.disabled = false;
     if (result.error) {
@@ -296,7 +296,7 @@ fetchBtn.addEventListener('click', async () => {
 
 downloadBtn.addEventListener('click', async () => {
     if (!currentInfo) return;
-    const result = await api.startDownload({
+    const result = await yankitApi.startDownload({
         url: currentInfo.url,
         qualityId: qualitySelect.value,
         title: currentInfo.title,
@@ -310,13 +310,13 @@ downloadBtn.addEventListener('click', async () => {
     }
 });
 
-$('#openFolderBtn').addEventListener('click', () => api.openFolder());
+$('#openFolderBtn').addEventListener('click', () => yankitApi.openFolder());
 
 $('#themeToggle').addEventListener('click', async () => {
     const current = document.documentElement.getAttribute('data-theme');
     const next = current === 'dark' ? 'light' : 'dark';
     applyTheme(next);
-    await api.saveSetting('theme', next);
+    await yankitApi.saveSetting('theme', next);
 });
 
 function applyTheme(theme) {
@@ -341,48 +341,48 @@ function closeSettings() {
 $$('.theme-opt').forEach(btn => {
     btn.addEventListener('click', async () => {
         applyTheme(btn.dataset.theme);
-        await api.saveSetting('theme', btn.dataset.theme);
+        await yankitApi.saveSetting('theme', btn.dataset.theme);
     });
 });
 
 $('#changePath').addEventListener('click', async () => {
-    const p = await api.pickFolder();
+    const p = await yankitApi.pickFolder();
     if (p) downloadPath.textContent = p;
 });
 
-$('#linkGithub').addEventListener('click', () => api.openUrl('https://github.com/TridentSky/yankit'));
-$('#linkDiscord').addEventListener('click', () => api.openUrl('https://discord.com'));
+$('#linkGithub').addEventListener('click', () => yankitApi.openUrl('https://github.com/TridentSky/yankit'));
+$('#linkDiscord').addEventListener('click', () => yankitApi.openUrl('https://discord.com'));
 
 $('#updateDownload').addEventListener('click', () => {
-    if (pendingUpdate) api.openUrl(pendingUpdate.url);
+    if (pendingUpdate) yankitApi.openUrl(pendingUpdate.url);
 });
 
 $('#updateDismiss').addEventListener('click', async () => {
     if (pendingUpdate) {
-        await api.saveSetting('dismissedUpdate', pendingUpdate.version);
+        await yankitApi.saveSetting('dismissedUpdate', pendingUpdate.version);
         updateBanner.classList.add('hidden');
         updateDot.classList.add('hidden');
         pendingUpdate = null;
     }
 });
 
-api.onDownloadUpdate((dl) => updateDownloadUI(dl));
+yankitApi.onDownloadUpdate((dl) => updateDownloadUI(dl));
 
 async function init() {
-    const settings = await api.getSettings();
+    const settings = await yankitApi.getSettings();
     applyTheme(settings.theme || 'dark');
     downloadPath.textContent = settings.downloadPath;
 
-    const version = await api.getVersion();
+    const version = await yankitApi.getVersion();
     $('#footerVersion').textContent = `Yankit Downloader v${version}`;
     $('#aboutVersion').textContent = `Yankit Downloader v${version}`;
 
-    const allStatus = await api.getAllStatus();
+    const allStatus = await yankitApi.getAllStatus();
     for (const dl of allStatus) updateDownloadUI(dl);
 
     urlInput.focus();
 
-    const update = await api.checkUpdate();
+    const update = await yankitApi.checkUpdate();
     if (update && update.version !== settings.dismissedUpdate) {
         pendingUpdate = update;
         updateDot.classList.remove('hidden');

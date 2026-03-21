@@ -119,6 +119,9 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'static', 'index.html'));
     mainWindow.once('ready-to-show', () => mainWindow.show());
 
+    // Uncomment to debug:
+    // mainWindow.webContents.openDevTools({ mode: 'detach' });
+
     mainWindow.on('close', (e) => {
         if (dl && dl.hasActive()) {
             const choice = dialog.showMessageBoxSync(mainWindow, {
