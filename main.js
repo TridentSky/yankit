@@ -57,6 +57,7 @@ function checkForUpdate() {
 }
 
 function createWindow() {
+    const iconPath = path.join(__dirname, 'build', 'icon.ico');
     mainWindow = new BrowserWindow({
         width: 920, height: 720,
         minWidth: 650, minHeight: 520,
@@ -64,6 +65,7 @@ function createWindow() {
         title: 'Yankit Downloader',
         autoHideMenuBar: true,
         show: false,
+        icon: fs.existsSync(iconPath) ? iconPath : undefined,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
