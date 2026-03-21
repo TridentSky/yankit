@@ -4,55 +4,57 @@ Download videos and audio from YouTube, Twitter, TikTok, Instagram and 1000+ sit
 
 A fast, clean desktop app for Windows and Linux. No ads, no tracking, no accounts.
 
-## Install
-
-### Windows
-
-1. Download **Yankit-Setup.exe** from [Releases](https://github.com/TridentSky/yankit/releases)
-2. Run the installer — choose your install folder (Program Files or anywhere)
-3. Desktop and Start Menu shortcuts are created automatically
-4. Everything is bundled (yt-dlp, ffmpeg), no extra setup
-
-### From Source
-
-Requires [Node.js](https://nodejs.org) v18+ and [yt-dlp](https://github.com/yt-dlp/yt-dlp):
-
-```
-pip install yt-dlp
-```
-
-[FFmpeg](https://ffmpeg.org) is also needed. On Windows, place `ffmpeg.exe` and `ffprobe.exe` in the `bin/` folder. On Linux, install from your package manager (`apt install ffmpeg`).
-
-```
-cd Yankit
-npm install
-```
-
-**Windows** — double-click `Yankit.vbs` to launch (no console window).
-
-**Linux** — run `./run.sh`. On desktop environments it opens as a native app. On headless systems it starts a web server at `http://localhost:3000`.
-
 ## Features
 
 - Downloads from 1000+ sites via [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 - Pick quality: Best, 4K, 1080p, 720p, or Audio Only (MP3)
 - Multiple downloads at once with progress, speed, and ETA
-- Choose download folder
+- Choose your download folder
 - Dark and Light theme
 - Auto-update notifications
 - Cleans up partial files on cancel
 
-## Linux
+## Install
 
-On desktop Linux (GNOME, KDE, etc.), the app runs as a native Electron window.
+### Windows (Installer)
 
-On servers or headless environments, `run.sh` starts a web server instead. Open `http://localhost:3000` in your browser. You can also start the server manually:
+1. Go to [Releases](https://github.com/TridentSky/yankit/releases) and download **Yankit-Setup.exe**
+2. Run the installer and choose where to install (Program Files or anywhere you want)
+3. Done — a desktop shortcut and Start Menu entry are created for you
+4. Everything is included (yt-dlp, ffmpeg), nothing else to install
 
-```
-node server.js
-```
+### Windows (From Source)
 
-Custom port: `PORT=8080 node server.js`.
+If you prefer to run from source instead of using the installer:
+
+1. Install [Node.js](https://nodejs.org) (v18 or newer)
+2. Install [yt-dlp](https://github.com/yt-dlp/yt-dlp): `pip install yt-dlp`
+3. Download [FFmpeg](https://ffmpeg.org/download.html) and place `ffmpeg.exe` + `ffprobe.exe` in the `bin/` folder
+4. Open the Yankit folder and run:
+   ```
+   npm install
+   ```
+5. Double-click **Yankit.vbs** to launch (no console window)
+
+### Linux
+
+1. Install [Node.js](https://nodejs.org) (v18 or newer)
+2. Install yt-dlp and ffmpeg:
+   ```bash
+   pip install yt-dlp
+   sudo apt install ffmpeg    # Ubuntu/Debian
+   # or: sudo dnf install ffmpeg (Fedora)
+   # or: sudo pacman -S ffmpeg (Arch)
+   ```
+3. Open the Yankit folder and run:
+   ```bash
+   chmod +x run.sh
+   ./run.sh
+   ```
+
+The script installs Node dependencies on first run. On desktop Linux (GNOME, KDE, etc.) it opens as a native app window. On headless/server systems it starts a web interface at `http://localhost:3000`.
+
+To run the web server manually: `node server.js` (custom port: `PORT=8080 node server.js`)
 
 ## Built With
 
