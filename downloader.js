@@ -178,8 +178,14 @@ class Downloader {
         });
 
         proc.stderr.on('data', data => {
-            const line = data.toString().trim();
-            if (line && dl.status !== 'cancelled') dl.error = line.split('\n').pop();
+            if (dl.status === 'cancelled') return;
+            const lines = data.toString().trim().split('\n');
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                if (trimmed.startsWith('WARNING:')) continue;
+                dl.error = trimmed;
+            }
         });
 
         proc.on('close', code => {
@@ -254,13 +260,16 @@ class Downloader {
                     if (!dl._smooth || dl.progress < (dl._prevProg || 0)) {
                         dl._smooth = raw;
                     } else {
-                        dl._smooth = Math.round(dl._smooth * 0.7 + raw * 0.3);
+                        dl._smooth = Math.round(dl._smooth * 0.85 + raw * 0.15);
                     }
                     dl._prevProg = dl.progress;
                     dl.eta = dl._smooth;
+                    dl._lastEtaTime = Date.now();
                 }
-            } else if (!em) {
-                dl.eta = 0;
+            } else {
+                if (dl._lastEtaTime && Date.now() - dl._lastEtaTime > 3000) {
+                    dl.eta = 0;
+                }
             }
         } else if (line.includes('[download] Destination:')) {
             const fp = line.split('Destination:')[1].trim();

@@ -145,15 +145,30 @@ function createCardHtml(dl) {
         <div class="dl-body">
             <div class="dl-title">${escapeHtml(dl.title)}</div>
             <div class="dl-meta">${escapeHtml(metaText(dl))}</div>
-            ${etaStr ? `<div class="dl-eta">${etaStr}</div>` : ''}
+            ${isActive ? `<div class="dl-eta" ${etaStr ? '' : 'style="visibility:hidden"'}>${etaStr || '0s left'}</div>` : ''}
             ${isActive ? `<div class="dl-progress"><div class="dl-progress-fill" style="width:${dl.progress}%"></div></div>` : ''}
         </div>
         <div class="dl-actions">${actionsHtml}</div>
     </div>`;
 }
 
+const _updateTimers = new Map();
 function updateDownloadUI(dl) {
     downloads.set(dl.id, dl);
+
+    if (dl.status === 'downloading') {
+        if (_updateTimers.has(dl.id)) return;
+        _updateTimers.set(dl.id, setTimeout(() => {
+            _updateTimers.delete(dl.id);
+            _renderCard(downloads.get(dl.id));
+        }, 250));
+        return;
+    }
+    _renderCard(dl);
+}
+
+function _renderCard(dl) {
+    if (!dl) return;
     const card = downloadsList.querySelector(`[data-id="${dl.id}"]`);
 
     if (!card) {
@@ -181,23 +196,15 @@ function updateDownloadUI(dl) {
         const meta = card.querySelector('.dl-meta');
         if (meta) meta.textContent = metaText(dl);
 
-        let etaEl = card.querySelector('.dl-eta');
+        const etaEl = card.querySelector('.dl-eta');
         const etaStr = formatEta(dl.eta);
-        if (etaStr) {
-            if (etaEl) {
+        if (etaEl) {
+            if (etaStr) {
                 etaEl.textContent = etaStr;
+                etaEl.style.visibility = '';
             } else {
-                const body = card.querySelector('.dl-body');
-                const progress = card.querySelector('.dl-progress');
-                if (body && progress) {
-                    const e = document.createElement('div');
-                    e.className = 'dl-eta';
-                    e.textContent = etaStr;
-                    body.insertBefore(e, progress);
-                }
+                etaEl.style.visibility = 'hidden';
             }
-        } else if (etaEl) {
-            etaEl.remove();
         }
 
         const fill = card.querySelector('.dl-progress-fill');
