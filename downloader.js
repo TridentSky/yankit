@@ -26,16 +26,22 @@ class Downloader {
         const local = path.join(this.binDir, 'yt-dlp' + ext);
         if (fs.existsSync(local)) {
             this.ytDlpCmd = local;
+            // Verify it's actually executable
+            try {
+                execSync(`"${local}" --version`, { windowsHide: true, stdio: 'pipe', timeout: 15000 });
+            } catch {
+                // File exists but can't run — might be blocked by antivirus, still try
+            }
             return true;
         }
         try {
-            execSync('yt-dlp --version', { windowsHide: true, stdio: 'pipe' });
+            execSync('yt-dlp --version', { windowsHide: true, stdio: 'pipe', timeout: 10000 });
             this.ytDlpCmd = 'yt-dlp';
             return true;
         } catch {}
         const py = IS_WIN ? 'python' : 'python3';
         try {
-            execSync(`${py} -m yt_dlp --version`, { windowsHide: true, stdio: 'pipe' });
+            execSync(`${py} -m yt_dlp --version`, { windowsHide: true, stdio: 'pipe', timeout: 10000 });
             this.ytDlpCmd = py;
             this.ytDlpBaseArgs = ['-m', 'yt_dlp'];
             return true;

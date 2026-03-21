@@ -7,33 +7,51 @@ const Downloader = require('./downloader');
 
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
-const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+
+let PKG_VERSION = '1.0.0';
+try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+    PKG_VERSION = pkg.version || '1.0.0';
+} catch {}
 
 app.disableHardwareAcceleration();
 
-const CACHE_DIR = IS_WIN
-    ? path.join(os.homedir(), 'AppData', 'Local', 'Yankit')
+// User data always goes to a writable location, never next to the exe
+const DATA_DIR = IS_WIN
+    ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Yankit')
     : IS_MAC
         ? path.join(os.homedir(), 'Library', 'Application Support', 'Yankit')
         : path.join(os.homedir(), '.config', 'yankit');
 
-app.setPath('userData', CACHE_DIR);
-app.setPath('cache', path.join(CACHE_DIR, 'Cache'));
+const CACHE_DIR = IS_WIN
+    ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Yankit')
+    : path.join(DATA_DIR, 'Cache');
+
+// Ensure directories exist
+for (const dir of [DATA_DIR, CACHE_DIR]) {
+    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+}
+
+app.setPath('userData', DATA_DIR);
+app.setPath('cache', CACHE_DIR);
 app.setPath('temp', path.join(CACHE_DIR, 'Temp'));
 
 let mainWindow;
 let dl;
 
 function sendToRenderer(channel, data) {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data);
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data);
+    } catch {}
 }
 
 function checkForUpdate() {
     return new Promise(resolve => {
-        https.get({
+        const req = https.get({
             hostname: 'api.github.com',
             path: '/repos/TridentSky/yankit/releases/latest',
             headers: { 'User-Agent': 'Yankit' },
+            timeout: 10000,
         }, res => {
             let data = '';
             res.on('data', c => data += c);
@@ -43,21 +61,45 @@ function checkForUpdate() {
                     const r = JSON.parse(data);
                     const latest = (r.tag_name || '').replace(/^v/, '');
                     const lp = latest.split('.').map(Number);
-                    const cp = PKG.version.split('.').map(Number);
+                    const cp = PKG_VERSION.split('.').map(Number);
                     let newer = false;
                     for (let i = 0; i < 3; i++) {
                         if ((lp[i] || 0) > (cp[i] || 0)) { newer = true; break; }
                         if ((lp[i] || 0) < (cp[i] || 0)) break;
                     }
-                    resolve(newer ? { version: latest, url: r.html_url } : null);
+                    if (newer) {
+                        // Find the installer asset URL
+                        const asset = (r.assets || []).find(a => a.name && a.name.endsWith('.exe'));
+                        resolve({
+                            version: latest,
+                            url: r.html_url,
+                            downloadUrl: asset ? asset.browser_download_url : r.html_url,
+                        });
+                    } else {
+                        resolve(null);
+                    }
                 } catch { resolve(null); }
             });
-        }).on('error', () => resolve(null));
+        });
+        req.on('error', () => resolve(null));
+        req.on('timeout', () => { req.destroy(); resolve(null); });
     });
 }
 
+function getIconPath() {
+    // In packaged app, icon is in resources/build/
+    // In dev, icon is in ./build/
+    const paths = [
+        path.join(__dirname, 'build', 'icon.ico'),
+        path.join(process.resourcesPath || __dirname, 'build', 'icon.ico'),
+    ];
+    for (const p of paths) {
+        try { if (fs.existsSync(p)) return p; } catch {}
+    }
+    return undefined;
+}
+
 function createWindow() {
-    const iconPath = path.join(__dirname, 'build', 'icon.ico');
     mainWindow = new BrowserWindow({
         width: 920, height: 720,
         minWidth: 650, minHeight: 520,
@@ -65,7 +107,7 @@ function createWindow() {
         title: 'Yankit Downloader',
         autoHideMenuBar: true,
         show: false,
-        icon: fs.existsSync(iconPath) ? iconPath : undefined,
+        icon: getIconPath(),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -78,7 +120,7 @@ function createWindow() {
     mainWindow.once('ready-to-show', () => mainWindow.show());
 
     mainWindow.on('close', (e) => {
-        if (dl.hasActive()) {
+        if (dl && dl.hasActive()) {
             const choice = dialog.showMessageBoxSync(mainWindow, {
                 type: 'question',
                 buttons: ['Cancel', 'Close Yankit'],
@@ -89,32 +131,42 @@ function createWindow() {
             });
             if (choice === 0) { e.preventDefault(); return; }
         }
-        dl.cleanupAll();
+        if (dl) dl.cleanupAll();
     });
 }
 
 app.whenReady().then(() => {
+    // Resolve bin directory — packaged apps put extraResources in resources/
     let binDir = path.join(__dirname, 'bin');
-    let settingsPath = path.join(__dirname, 'settings.json');
-
     if (app.isPackaged) {
         binDir = path.join(process.resourcesPath, 'bin');
-        settingsPath = path.join(path.dirname(app.getPath('exe')), 'settings.json');
     }
+
+    // Settings always in writable user data directory
+    const settingsPath = path.join(DATA_DIR, 'settings.json');
 
     dl = new Downloader({
         binDir, settingsPath,
         onUpdate: (data) => sendToRenderer('download-update', data),
     });
 
-    if (!dl.init()) {
-        dialog.showErrorBox('yt-dlp Not Found',
-            'Yankit requires yt-dlp.\nInstall it with: pip install yt-dlp');
-        app.quit();
-        return;
-    }
+    const found = dl.init();
 
     createWindow();
+
+    if (!found) {
+        // Show error after window is ready so user sees the app
+        mainWindow.once('ready-to-show', () => {
+            dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'yt-dlp Not Found',
+                message: 'Yankit could not find yt-dlp.',
+                detail: 'The bundled yt-dlp binary may be missing or blocked by antivirus.\n\n'
+                    + 'Checked: ' + path.join(binDir, IS_WIN ? 'yt-dlp.exe' : 'yt-dlp') + '\n\n'
+                    + 'If the file exists, try adding an antivirus exception for the Yankit install folder.',
+            });
+        });
+    }
 });
 
 app.on('window-all-closed', () => {
@@ -122,66 +174,90 @@ app.on('window-all-closed', () => {
     app.quit();
 });
 
-ipcMain.handle('fetch-info', (_, url) => dl.fetchInfo(url));
+// --- IPC Handlers ---
+// Wrap each handler to prevent unhandled rejections from crashing the app
+
+ipcMain.handle('fetch-info', async (_, url) => {
+    try { return await dl.fetchInfo(url); }
+    catch (e) { return { error: e.message || 'Fetch failed' }; }
+});
 
 ipcMain.handle('start-download', (_, data) => {
-    return { downloadId: dl.startDownload(data) };
+    try { return { downloadId: dl.startDownload(data) }; }
+    catch (e) { return { error: e.message || 'Download failed' }; }
 });
 
 ipcMain.handle('cancel-download', (_, id) => {
-    dl.cancelDownload(id);
+    try { dl.cancelDownload(id); } catch {}
     return true;
 });
 
 ipcMain.handle('remove-download', (_, id) => {
-    dl.removeDownload(id);
+    try { dl.removeDownload(id); } catch {}
     return true;
 });
 
-ipcMain.handle('get-all-status', () => dl.getAllStatus());
+ipcMain.handle('get-all-status', () => {
+    try { return dl.getAllStatus(); } catch { return []; }
+});
 
-ipcMain.handle('get-settings', () => dl.loadSettings());
+ipcMain.handle('get-settings', () => {
+    try { return dl.loadSettings(); }
+    catch { return { downloadPath: path.join(os.homedir(), 'Downloads'), theme: 'dark' }; }
+});
 
 ipcMain.handle('save-setting', (_, key, value) => {
-    const s = dl.loadSettings();
-    s[key] = value;
-    dl.saveSettings(s);
+    try {
+        const s = dl.loadSettings();
+        s[key] = value;
+        dl.saveSettings(s);
+    } catch {}
     return true;
 });
 
 ipcMain.handle('pick-folder', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-        properties: ['openDirectory'],
-        defaultPath: dl.loadSettings().downloadPath,
-    });
-    if (!result.canceled && result.filePaths.length > 0) {
-        const s = dl.loadSettings();
-        s.downloadPath = result.filePaths[0];
-        dl.saveSettings(s);
-        return result.filePaths[0];
-    }
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openDirectory'],
+            defaultPath: dl.loadSettings().downloadPath,
+        });
+        if (!result.canceled && result.filePaths.length > 0) {
+            const s = dl.loadSettings();
+            s.downloadPath = result.filePaths[0];
+            dl.saveSettings(s);
+            return result.filePaths[0];
+        }
+    } catch {}
     return null;
 });
 
 ipcMain.handle('open-file', async (_, filepath) => {
-    if (!filepath) return;
-    filepath = path.resolve(filepath);
-    if (fs.existsSync(filepath)) await shell.openPath(filepath);
+    try {
+        if (!filepath) return;
+        filepath = path.resolve(filepath);
+        if (fs.existsSync(filepath)) await shell.openPath(filepath);
+    } catch {}
 });
 
 ipcMain.handle('show-in-folder', (_, filepath) => {
-    if (!filepath) return;
-    filepath = path.resolve(filepath);
-    if (fs.existsSync(filepath)) shell.showItemInFolder(filepath);
+    try {
+        if (!filepath) return;
+        filepath = path.resolve(filepath);
+        if (fs.existsSync(filepath)) shell.showItemInFolder(filepath);
+    } catch {}
 });
 
 ipcMain.handle('open-folder', () => {
-    const dir = dl.loadSettings().downloadPath;
-    if (fs.existsSync(dir)) shell.openPath(dir);
+    try {
+        const dir = dl.loadSettings().downloadPath;
+        if (fs.existsSync(dir)) shell.openPath(dir);
+    } catch {}
 });
 
-ipcMain.handle('open-url', (_, url) => shell.openExternal(url));
+ipcMain.handle('open-url', (_, url) => {
+    try { shell.openExternal(url); } catch {}
+});
 
 ipcMain.handle('check-update', () => checkForUpdate());
 
-ipcMain.handle('get-version', () => PKG.version);
+ipcMain.handle('get-version', () => PKG_VERSION);

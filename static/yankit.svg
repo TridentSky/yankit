@@ -2,44 +2,26 @@
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#E74C3C"/>
-      <stop offset="100%" stop-color="#C0392B"/>
+      <stop offset="0%" stop-color="#FF5A4F"/>
+      <stop offset="100%" stop-color="#D63B30"/>
     </linearGradient>
-    <linearGradient id="shine" x1="0" y1="0" x2="0.3" y2="1">
-      <stop offset="0%" stop-color="#fff" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff" stop-opacity="0.12"/>
+      <stop offset="50%" stop-color="#fff" stop-opacity="0"/>
     </linearGradient>
   </defs>
 
-  <!-- Main background -->
-  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#shine)"/>
 
-  <!-- Subtle shine -->
-  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#shine)"/>
+  <!-- Download arrow — shaft + chevron -->
+  <line x1="256" y1="96" x2="256" y2="296"
+        stroke="#fff" stroke-width="40" stroke-linecap="round"/>
+  <polyline points="156,216 256,326 356,216"
+        fill="none" stroke="#fff" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
 
-  <!-- Curved hook top — the "yank" pull -->
-  <path d="M172 100 C172 66, 210 48, 256 78"
-        stroke="#fff" stroke-width="28" stroke-linecap="round" fill="none"/>
-
-  <!-- Hook tip circle -->
-  <circle cx="164" cy="105" r="13" fill="#fff"/>
-  <circle cx="164" cy="105" r="6.5" fill="#E74C3C"/>
-
-  <!-- Vertical shaft -->
-  <path d="M256 78 L256 295"
-        stroke="#fff" stroke-width="28" stroke-linecap="round" fill="none"/>
-
-  <!-- Arrow chevron head -->
-  <path d="M168 245 L256 343 L344 245"
-        stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-
-  <!-- Download tray base -->
-  <path d="M125 390 L195 390" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity="0.5"/>
-  <path d="M317 390 L387 390" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity="0.5"/>
-
-  <!-- Speed lines -->
-  <line x1="118" y1="130" x2="118" y2="188" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity="0.2"/>
-  <line x1="394" y1="130" x2="394" y2="188" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity="0.2"/>
-  <line x1="100" y1="175" x2="100" y2="215" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.12"/>
-  <line x1="412" y1="175" x2="412" y2="215" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.12"/>
+  <!-- Download tray -->
+  <path d="M120 380 Q120 416 156 416 L356 416 Q392 416 392 380"
+        fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round" opacity="0.85"/>
 </svg>
