@@ -5,7 +5,8 @@ const https = require('https');
 const Downloader = require('./downloader');
 
 const PORT = process.env.PORT || 3000;
-const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+let PKG_VERSION = '1.0.0';
+try { PKG_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version; } catch {}
 
 const MIME = {
     '.html': 'text/html',
@@ -17,13 +18,16 @@ const MIME = {
     '.ico': 'image/x-icon',
 };
 
+const STATIC_DIR = path.resolve(path.join(__dirname, 'static'));
 const sseClients = new Set();
 
 function broadcast(data) {
     const msg = `data: ${JSON.stringify(data)}\n\n`;
+    const dead = [];
     for (const res of sseClients) {
-        try { res.write(msg); } catch { sseClients.delete(res); }
+        try { res.write(msg); } catch { dead.push(res); }
     }
+    dead.forEach(r => sseClients.delete(r));
 }
 
 const dl = new Downloader({
@@ -35,10 +39,15 @@ if (!dl.init()) {
     process.exit(1);
 }
 
+const MAX_BODY = 100 * 1024; // 100KB
+
 function readBody(req) {
     return new Promise(resolve => {
         let body = '';
-        req.on('data', c => body += c);
+        req.on('data', c => {
+            body += c;
+            if (body.length > MAX_BODY) { req.destroy(); resolve({}); }
+        });
         req.on('end', () => {
             try { resolve(JSON.parse(body)); }
             catch { resolve({}); }
@@ -53,10 +62,11 @@ function json(res, data, status = 200) {
 
 function checkForUpdate() {
     return new Promise(resolve => {
-        https.get({
+        const req = https.get({
             hostname: 'api.github.com',
             path: '/repos/TridentSky/yankit/releases/latest',
             headers: { 'User-Agent': 'Yankit' },
+            timeout: 10000,
         }, res => {
             let data = '';
             res.on('data', c => data += c);
@@ -66,7 +76,7 @@ function checkForUpdate() {
                     const r = JSON.parse(data);
                     const latest = (r.tag_name || '').replace(/^v/, '');
                     const lp = latest.split('.').map(Number);
-                    const cp = PKG.version.split('.').map(Number);
+                    const cp = PKG_VERSION.split('.').map(Number);
                     let newer = false;
                     for (let i = 0; i < 3; i++) {
                         if ((lp[i] || 0) > (cp[i] || 0)) { newer = true; break; }
@@ -75,7 +85,9 @@ function checkForUpdate() {
                     resolve(newer ? { version: latest, url: r.html_url } : null);
                 } catch { resolve(null); }
             });
-        }).on('error', () => resolve(null));
+        });
+        req.on('error', () => resolve(null));
+        req.on('timeout', () => { req.destroy(); resolve(null); });
     });
 }
 
@@ -83,6 +95,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
 
     if (url.pathname === '/api/events') {
+        if (sseClients.size >= 50) { res.writeHead(503); res.end(); return; }
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -91,57 +104,65 @@ const server = http.createServer(async (req, res) => {
         res.write('\n');
         sseClients.add(res);
         req.on('close', () => sseClients.delete(res));
+        req.on('error', () => sseClients.delete(res));
         return;
     }
 
     if (url.pathname.startsWith('/api/')) {
         const body = req.method === 'POST' ? await readBody(req) : {};
 
-        switch (url.pathname) {
-            case '/api/fetch-info':
-                json(res, await dl.fetchInfo(body.url));
-                return;
-            case '/api/start-download':
-                json(res, { downloadId: dl.startDownload(body) });
-                return;
-            case '/api/cancel-download':
-                dl.cancelDownload(body.id);
-                json(res, { ok: true });
-                return;
-            case '/api/remove-download':
-                dl.removeDownload(body.id);
-                json(res, { ok: true });
-                return;
-            case '/api/status':
-                json(res, dl.getAllStatus());
-                return;
-            case '/api/settings':
-                json(res, dl.loadSettings());
-                return;
-            case '/api/save-setting':
-                const s = dl.loadSettings();
-                s[body.key] = body.value;
-                dl.saveSettings(s);
-                json(res, { ok: true });
-                return;
-            case '/api/check-update':
-                json(res, await checkForUpdate());
-                return;
-            case '/api/version':
-                json(res, PKG.version);
-                return;
-            default:
-                json(res, { error: 'Not found' }, 404);
-                return;
+        try {
+            switch (url.pathname) {
+                case '/api/fetch-info':
+                    json(res, await dl.fetchInfo(body.url));
+                    return;
+                case '/api/start-download':
+                    json(res, { downloadId: dl.startDownload(body) });
+                    return;
+                case '/api/cancel-download':
+                    dl.cancelDownload(body.id);
+                    json(res, { ok: true });
+                    return;
+                case '/api/remove-download':
+                    dl.removeDownload(body.id);
+                    json(res, { ok: true });
+                    return;
+                case '/api/status':
+                    json(res, dl.getAllStatus());
+                    return;
+                case '/api/settings':
+                    json(res, dl.loadSettings());
+                    return;
+                case '/api/save-setting': {
+                    const s = dl.loadSettings();
+                    if (typeof body.key === 'string') { s[body.key] = body.value; dl.saveSettings(s); }
+                    json(res, { ok: true });
+                    return;
+                }
+                case '/api/check-update':
+                    json(res, await checkForUpdate());
+                    return;
+                case '/api/version':
+                    json(res, PKG_VERSION);
+                    return;
+                default:
+                    json(res, { error: 'Not found' }, 404);
+                    return;
+            }
+        } catch (e) {
+            json(res, { error: e.message || 'Internal error' }, 500);
+            return;
         }
     }
 
+    // Static file serving with path traversal protection
     let filePath = url.pathname === '/'
-        ? path.join(__dirname, 'static', 'index.html')
-        : path.join(__dirname, 'static', url.pathname);
+        ? path.join(STATIC_DIR, 'index.html')
+        : path.join(STATIC_DIR, url.pathname);
 
     filePath = path.resolve(filePath);
-    if (!filePath.startsWith(path.join(__dirname, 'static'))) {
+    const relative = path.relative(STATIC_DIR, filePath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
         res.writeHead(403);
         res.end('Forbidden');
         return;
@@ -159,16 +180,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`\n  Yankit Downloader v${PKG.version}`);
+    console.log(`\n  Yankit Downloader v${PKG_VERSION}`);
     console.log(`  Running at http://localhost:${PORT}\n`);
 });
 
-process.on('SIGINT', () => {
-    dl.cleanupAll();
-    process.exit();
-});
-
-process.on('SIGTERM', () => {
-    dl.cleanupAll();
-    process.exit();
-});
+process.on('SIGINT', () => { dl.cleanupAll(); process.exit(); });
+process.on('SIGTERM', () => { dl.cleanupAll(); process.exit(); });

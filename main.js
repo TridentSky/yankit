@@ -238,6 +238,8 @@ ipcMain.handle('open-file', async (_, filepath) => {
     try {
         if (!filepath) return;
         filepath = path.resolve(filepath);
+        const dlDir = path.resolve(dl.loadSettings().downloadPath);
+        if (!filepath.startsWith(dlDir + path.sep) && filepath !== dlDir) return;
         if (fs.existsSync(filepath)) await shell.openPath(filepath);
     } catch {}
 });
@@ -246,6 +248,8 @@ ipcMain.handle('show-in-folder', (_, filepath) => {
     try {
         if (!filepath) return;
         filepath = path.resolve(filepath);
+        const dlDir = path.resolve(dl.loadSettings().downloadPath);
+        if (!filepath.startsWith(dlDir + path.sep) && filepath !== dlDir) return;
         if (fs.existsSync(filepath)) shell.showItemInFolder(filepath);
     } catch {}
 });

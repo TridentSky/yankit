@@ -144,7 +144,7 @@ function createCardHtml(dl) {
         </div>
         <div class="dl-body">
             <div class="dl-title">${escapeHtml(dl.title)}</div>
-            <div class="dl-meta">${metaText(dl)}</div>
+            <div class="dl-meta">${escapeHtml(metaText(dl))}</div>
             ${etaStr ? `<div class="dl-eta">${etaStr}</div>` : ''}
             ${isActive ? `<div class="dl-progress"><div class="dl-progress-fill" style="width:${dl.progress}%"></div></div>` : ''}
         </div>

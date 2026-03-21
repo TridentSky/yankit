@@ -1,4 +1,4 @@
-const { spawn, execSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -26,25 +26,19 @@ class Downloader {
         const local = path.join(this.binDir, 'yt-dlp' + ext);
         if (fs.existsSync(local)) {
             this.ytDlpCmd = local;
-            // Verify it's actually executable
             try {
-                execSync(`"${local}" --version`, { windowsHide: true, stdio: 'pipe', timeout: 15000 });
-            } catch {
-                // File exists but can't run — might be blocked by antivirus, still try
-            }
+                spawnSync(local, ['--version'], { windowsHide: true, stdio: 'pipe', timeout: 15000 });
+            } catch {}
             return true;
         }
         try {
-            execSync('yt-dlp --version', { windowsHide: true, stdio: 'pipe', timeout: 10000 });
-            this.ytDlpCmd = 'yt-dlp';
-            return true;
+            const r = spawnSync('yt-dlp', ['--version'], { windowsHide: true, stdio: 'pipe', timeout: 10000 });
+            if (r.status === 0) { this.ytDlpCmd = 'yt-dlp'; return true; }
         } catch {}
         const py = IS_WIN ? 'python' : 'python3';
         try {
-            execSync(`${py} -m yt_dlp --version`, { windowsHide: true, stdio: 'pipe', timeout: 10000 });
-            this.ytDlpCmd = py;
-            this.ytDlpBaseArgs = ['-m', 'yt_dlp'];
-            return true;
+            const r = spawnSync(py, ['-m', 'yt_dlp', '--version'], { windowsHide: true, stdio: 'pipe', timeout: 10000 });
+            if (r.status === 0) { this.ytDlpCmd = py; this.ytDlpBaseArgs = ['-m', 'yt_dlp']; return true; }
         } catch {}
         return false;
     }
@@ -126,9 +120,16 @@ class Downloader {
     }
 
     startDownload({ url, qualityId, title, thumbnail }) {
+        // Validate URL
+        try {
+            const u = new URL(url);
+            if (!['http:', 'https:'].includes(u.protocol)) throw new Error();
+        } catch { return null; }
+
         const id = crypto.randomUUID().slice(0, 8);
         const settings = this.loadSettings();
-        const outDir = settings.downloadPath || path.join(os.homedir(), 'Downloads');
+        let outDir = settings.downloadPath || path.join(os.homedir(), 'Downloads');
+        if (!path.isAbsolute(outDir)) outDir = path.join(os.homedir(), 'Downloads');
         if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
         const args = [
@@ -143,8 +144,9 @@ class Downloader {
         } else if (qualityId === 'audio') {
             args.push('-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0');
         } else if (qualityId.startsWith('res_')) {
-            const h = qualityId.split('_')[1];
-            args.push('-f', `bestvideo[height<=${h}]+bestaudio/best[height<=${h}]`);
+            const h = parseInt(qualityId.split('_')[1], 10);
+            if (isNaN(h) || h < 1 || h > 8192) { args.push('-f', 'best'); }
+            else { args.push('-f', `bestvideo[height<=${h}]+bestaudio/best[height<=${h}]`); }
             args.push('--merge-output-format', 'mp4');
         } else {
             args.push('-f', 'best');
@@ -166,6 +168,7 @@ class Downloader {
         let buf = '';
         proc.stdout.on('data', data => {
             buf += data.toString();
+            if (buf.length > 20000) buf = buf.slice(-10000);
             const lines = buf.split('\n');
             buf = lines.pop();
             for (const line of lines) {
@@ -188,7 +191,7 @@ class Downloader {
                     dl.eta = 0;
                 } else {
                     dl.status = 'error';
-                    if (!dl.error) dl.error = 'Download failed';
+                    if (!dl.error) dl.error = `Download failed (exit code ${code})`;
                     this._cleanup(dl);
                 }
             }
