@@ -26,8 +26,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "allowElevation": false,
-      "perMachine": false,
+      "allowElevation": true,
+      "perMachine": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Yankit Downloader",

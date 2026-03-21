@@ -19,9 +19,12 @@ A fast, clean desktop app for Windows and Linux. No ads, no tracking, no account
 ### Windows (Installer)
 
 1. Go to [Releases](https://github.com/TridentSky/yankit/releases) and download **Yankit-Setup.exe**
-2. Double-click to install — no admin rights needed
-3. Done — a desktop shortcut and Start Menu entry are created for you
-4. Everything is included (yt-dlp, ffmpeg), nothing else to install
+2. Run the installer — Windows may show a blue **"Windows protected your PC"** warning because the app isn't signed yet. Click **"More info"** then **"Run anyway"**
+3. Accept the admin prompt and choose your install folder
+4. Done — a desktop shortcut and Start Menu entry are created for you
+5. Everything is included (yt-dlp, ffmpeg), nothing else to install
+
+> **Note:** If Windows blocks the installer completely (Smart App Control), go to **Settings > Privacy & Security > Windows Security > App & browser control > Smart App Control** and set it to **Off**. This only needs to be done once.
 
 ### Windows (From Source)
 
