@@ -158,7 +158,6 @@ const server = http.createServer(async (req, res) => {
         }
     }
 
-    // Static file serving with path traversal protection
     let filePath = url.pathname === '/'
         ? path.join(STATIC_DIR, 'index.html')
         : path.join(STATIC_DIR, url.pathname);

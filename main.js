@@ -16,7 +16,7 @@ try {
 
 app.disableHardwareAcceleration();
 
-// User data always goes to a writable location, never next to the exe
+
 const DATA_DIR = IS_WIN
     ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Yankit')
     : IS_MAC
@@ -27,7 +27,7 @@ const CACHE_DIR = IS_WIN
     ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Yankit')
     : path.join(DATA_DIR, 'Cache');
 
-// Ensure directories exist
+
 for (const dir of [DATA_DIR, CACHE_DIR]) {
     try { fs.mkdirSync(dir, { recursive: true }); } catch {}
 }
@@ -68,7 +68,7 @@ function checkForUpdate() {
                         if ((lp[i] || 0) < (cp[i] || 0)) break;
                     }
                     if (newer) {
-                        // Find the installer asset URL
+
                         const asset = (r.assets || []).find(a => a.name && a.name.endsWith('.exe'));
                         resolve({
                             version: latest,
@@ -87,8 +87,6 @@ function checkForUpdate() {
 }
 
 function getIconPath() {
-    // In packaged app, icon is in resources/build/
-    // In dev, icon is in ./build/
     const paths = [
         path.join(__dirname, 'build', 'icon.ico'),
         path.join(process.resourcesPath || __dirname, 'build', 'icon.ico'),
@@ -119,9 +117,6 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'static', 'index.html'));
     mainWindow.once('ready-to-show', () => mainWindow.show());
 
-    // Uncomment to debug:
-    // mainWindow.webContents.openDevTools({ mode: 'detach' });
-
     mainWindow.on('close', (e) => {
         if (dl && dl.hasActive()) {
             const choice = dialog.showMessageBoxSync(mainWindow, {
@@ -139,13 +134,11 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-    // Resolve bin directory — packaged apps put extraResources in resources/
     let binDir = path.join(__dirname, 'bin');
     if (app.isPackaged) {
         binDir = path.join(process.resourcesPath, 'bin');
     }
 
-    // Settings always in writable user data directory
     const settingsPath = path.join(DATA_DIR, 'settings.json');
 
     dl = new Downloader({
@@ -158,7 +151,6 @@ app.whenReady().then(() => {
     createWindow();
 
     if (!found) {
-        // Show error after window is ready so user sees the app
         mainWindow.once('ready-to-show', () => {
             dialog.showMessageBox(mainWindow, {
                 type: 'error',
@@ -176,9 +168,6 @@ app.on('window-all-closed', () => {
     if (dl) dl.cleanupAll();
     app.quit();
 });
-
-// --- IPC Handlers ---
-// Wrap each handler to prevent unhandled rejections from crashing the app
 
 ipcMain.handle('fetch-info', async (_, url) => {
     try { return await dl.fetchInfo(url); }
