@@ -1,0 +1,41 @@
+{
+  "name": "yankit",
+  "version": "1.0.0",
+  "description": "Download videos and audio from YouTube, Twitter, TikTok, Instagram and 1000+ sites",
+  "main": "main.js",
+  "author": "Brando Silva",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "build": "electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "build": {
+    "appId": "com.brandosilva.yankit",
+    "productName": "Yankit Downloader",
+    "artifactName": "Yankit-Setup.${ext}",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Yankit Downloader"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "downloader.js",
+      "static/**"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin"
+      }
+    ]
+  }
+}
