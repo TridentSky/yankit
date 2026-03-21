@@ -167,6 +167,7 @@ class Downloader {
 
         let buf = '';
         proc.stdout.on('data', data => {
+            if (dl.status === 'cancelled') return;
             buf += data.toString();
             if (buf.length > 20000) buf = buf.slice(-10000);
             const lines = buf.split('\n');
@@ -206,6 +207,7 @@ class Downloader {
 
         proc.on('error', err => {
             this.processes.delete(id);
+            if (dl.status === 'cancelled') return;
             dl.status = 'error';
             dl.error = err.message;
             this.onUpdate(dl);
@@ -214,16 +216,27 @@ class Downloader {
         return id;
     }
 
+    _killProc(proc) {
+        try {
+            if (IS_WIN) {
+                spawn('taskkill', ['/pid', proc.pid.toString(), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+            } else {
+                proc.kill('SIGKILL');
+            }
+        } catch {}
+    }
+
     cancelDownload(id) {
-        const proc = this.processes.get(id);
         const dl = this.downloads.get(id);
-        if (proc) { try { proc.kill(); } catch {} this.processes.delete(id); }
-        if (dl) { dl.status = 'cancelled'; this._cleanup(dl); this.onUpdate(dl); }
+        if (dl) dl.status = 'cancelled';
+        const proc = this.processes.get(id);
+        if (proc) { this._killProc(proc); this.processes.delete(id); }
+        if (dl) { this._cleanup(dl); this.onUpdate(dl); }
     }
 
     removeDownload(id) {
         const proc = this.processes.get(id);
-        if (proc) { try { proc.kill(); } catch {} this.processes.delete(id); }
+        if (proc) { this._killProc(proc); this.processes.delete(id); }
         this.downloads.delete(id);
     }
 
@@ -239,7 +252,7 @@ class Downloader {
 
     cleanupAll() {
         for (const [id, proc] of this.processes) {
-            try { proc.kill(); } catch {}
+            this._killProc(proc);
             const dl = this.downloads.get(id);
             if (dl && dl.status !== 'completed') this._cleanup(dl);
         }
