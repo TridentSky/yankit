@@ -4,6 +4,9 @@ Download videos and audio from YouTube, Twitter, TikTok, Instagram and 1000+ sit
 
 A fast, clean desktop app for Windows and Linux. No ads, no tracking, no accounts.
 
+![Yankit Downloader - Quality Selection](build/demo1.png)
+![Yankit Downloader - Settings](build/demo2.png)
+
 ## Features
 
 - Downloads from 1000+ sites via [yt-dlp](https://github.com/yt-dlp/yt-dlp)
@@ -58,6 +61,10 @@ If you prefer to run from source instead of using the installer:
 The script installs Node dependencies on first run. On desktop Linux (GNOME, KDE, etc.) it opens as a native app window. On headless/server systems it starts a web interface at `http://localhost:3000`.
 
 To run the web server manually: `node server.js` (custom port: `PORT=8080 node server.js`)
+
+## Disclaimer
+
+This tool is a frontend for [yt-dlp](https://github.com/yt-dlp/yt-dlp). It does not host, store, or distribute any media content. Users are solely responsible for ensuring their use complies with applicable laws and the terms of service of the sites they access. The developers assume no liability for misuse.
 
 ## Built With
 
