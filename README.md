@@ -19,7 +19,7 @@ A fast, clean desktop app for Windows and Linux. No ads, no tracking, no account
 ### Windows (Installer)
 
 1. Go to [Releases](https://github.com/TridentSky/yankit/releases) and download **Yankit-Setup.exe**
-2. Run the installer and choose where to install (Program Files or anywhere you want)
+2. Double-click to install — no admin rights needed
 3. Done — a desktop shortcut and Start Menu entry are created for you
 4. Everything is included (yt-dlp, ffmpeg), nothing else to install
 
