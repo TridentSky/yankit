@@ -159,17 +159,26 @@ class Downloader {
         if (replace) args.push('--force-overwrites');
 
         if (qualityId === 'best') {
-            args.push('-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best');
+            args.push('-f', 'bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best');
             args.push('--merge-output-format', 'mp4');
+            args.push('--recode-video', 'mp4');
+            args.push('--postprocessor-args', 'VideoConvertor:-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart');
         } else if (qualityId === 'audio') {
             args.push('-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0');
         } else if (qualityId.startsWith('res_')) {
             const h = parseInt(qualityId.split('_')[1], 10);
-            if (isNaN(h) || h < 1 || h > 8192) { args.push('-f', 'best'); }
-            else { args.push('-f', `bestvideo[height<=${h}]+bestaudio/best[height<=${h}]`); }
+            if (isNaN(h) || h < 1 || h > 8192) {
+                args.push('-f', 'best');
+            } else {
+                args.push('-f', `bestvideo[vcodec^=avc1][height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}]+bestaudio/best[height<=${h}]`);
+            }
             args.push('--merge-output-format', 'mp4');
+            args.push('--recode-video', 'mp4');
+            args.push('--postprocessor-args', 'VideoConvertor:-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart');
         } else {
             args.push('-f', 'best');
+            args.push('--recode-video', 'mp4');
+            args.push('--postprocessor-args', 'VideoConvertor:-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart');
         }
         args.push(url);
 
@@ -194,7 +203,7 @@ class Downloader {
             for (const line of lines) {
                 const trimmed = line.trim();
                 if (!trimmed) continue;
-                if (trimmed.includes('Destination:') || trimmed.includes('[Merger]') || trimmed.includes('[ExtractAudio]')) {
+                if (trimmed.includes('Destination:') || trimmed.includes('[Merger]') || trimmed.includes('[ExtractAudio]') || trimmed.includes('[VideoConvertor]')) {
                     this._parseFileLine(trimmed, dl);
                 }
                 if (dl.status === 'cancelled') continue;
@@ -299,6 +308,11 @@ class Downloader {
         } else if (line.includes('[ExtractAudio]')) {
             const m = line.match(/Destination:\s*(.+)/);
             if (m) this._trackFile(m[1].trim(), dl);
+        } else if (line.includes('[VideoConvertor]')) {
+            const q = line.match(/"([^"]+)"/);
+            if (q) { this._trackFile(q[1], dl); return; }
+            const m = line.match(/Destination:\s*(.+)/);
+            if (m) this._trackFile(m[1].trim(), dl);
         }
     }
 
@@ -331,7 +345,7 @@ class Downloader {
             dl.status = 'merging';
             dl.progress = 100;
             dl.eta = 0;
-        } else if (line.includes('[ExtractAudio]')) {
+        } else if (line.includes('[ExtractAudio]') || line.includes('[VideoConvertor]')) {
             dl.status = 'converting';
             dl.progress = 100;
             dl.eta = 0;
