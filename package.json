@@ -36,6 +36,7 @@
       "installerHeaderIcon": "build/icon.ico",
       "installerSidebar": "build/installerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp",
+      "include": "build/installer.nsh",
       "deleteAppDataOnUninstall": false
     },
     "files": [
