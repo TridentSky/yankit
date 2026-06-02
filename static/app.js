@@ -66,6 +66,21 @@ function escapeHtml(str) {
     return d.innerHTML;
 }
 
+let _toastTimer = null;
+function showToast(message) {
+    let el = $('#toast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'toast';
+        el.className = 'toast';
+        document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.classList.add('visible');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => el.classList.remove('visible'), 3200);
+}
+
 function formatDuration(sec) {
     if (!sec) return '';
     const h = Math.floor(sec / 3600);
@@ -107,7 +122,7 @@ function metaText(dl) {
             return t;
         }
         case 'merging': return 'Merging video + audio...';
-        case 'converting': return 'Converting to MP3...';
+        case 'converting': return dl.quality === 'audio' ? 'Converting to MP3...' : 'Converting to H.264...';
         case 'completed': return `Completed \u00B7 ${qualityLabel(dl.quality)}`;
         case 'error': return dl.error || 'Error';
         case 'cancelled': return 'Cancelled';
@@ -139,7 +154,7 @@ function createCardHtml(dl) {
 
     return `<div class="dl-card ${dl.status}" data-id="${dl.id}" data-status="${dl.status}" data-new>
         <div class="dl-thumb-wrap">
-            <img src="${escapeHtml(dl.thumbnail)}" class="dl-thumb" onerror="this.style.display='none'">
+            <img src="${escapeHtml(dl.thumbnail)}" class="dl-thumb">
             ${isDone ? '<div class="dl-check">&#10003;</div>' : ''}
         </div>
         <div class="dl-body">
@@ -214,6 +229,12 @@ function _renderCard(dl) {
     emptyState.classList.toggle('hidden', downloads.size > 0);
 }
 
+downloadsList.addEventListener('error', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('dl-thumb')) {
+        e.target.style.display = 'none';
+    }
+}, true);
+
 downloadsList.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
@@ -231,8 +252,18 @@ downloadsList.addEventListener('click', (e) => {
     if (action === 'open' || action === 'folder') {
         const dl = downloads.get(id);
         if (dl && dl.filepath) {
-            if (action === 'open') yankitApi.openFile(dl.filepath);
-            else yankitApi.showInFolder(dl.filepath);
+            const call = action === 'open'
+                ? yankitApi.openFile(dl.filepath)
+                : yankitApi.showInFolder(dl.filepath);
+            Promise.resolve(call).then(res => {
+                if (res && res.ok === false) {
+                    if (res.reason === 'missing-file') showToast('File was moved or deleted — opened the folder instead');
+                    else showToast('Could not open the file');
+                }
+            }).catch(() => {});
+        } else {
+            yankitApi.openFolder();
+            showToast('Opened the downloads folder');
         }
     }
 });
@@ -363,6 +394,17 @@ $('#changePath').addEventListener('click', async () => {
     if (p) downloadPath.textContent = p;
 });
 
+const editorCompatToggle = $('#editorCompatToggle');
+function setEditorCompat(on) {
+    editorCompatToggle.classList.toggle('on', on);
+    editorCompatToggle.setAttribute('aria-checked', on ? 'true' : 'false');
+}
+editorCompatToggle.addEventListener('click', async () => {
+    const next = !editorCompatToggle.classList.contains('on');
+    setEditorCompat(next);
+    await yankitApi.saveSetting('editorCompat', next);
+});
+
 $('#linkGithub').addEventListener('click', () => yankitApi.openUrl('https://github.com/TridentSky/yankit'));
 $('#linkDiscord').addEventListener('click', () => yankitApi.openUrl('https://discord.com'));
 
@@ -385,6 +427,7 @@ async function init() {
     const settings = await yankitApi.getSettings();
     applyTheme(settings.theme || 'dark');
     downloadPath.textContent = settings.downloadPath;
+    setEditorCompat(settings.editorCompat !== false);
 
     const version = await yankitApi.getVersion();
     $('#footerVersion').textContent = `Yankit Downloader v${version}`;

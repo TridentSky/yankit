@@ -63,6 +63,51 @@ class Downloader {
         fs.writeFileSync(this.settingsPath, JSON.stringify(s, null, 2));
     }
 
+    resolveDownloadDir() {
+        const def = path.join(os.homedir(), 'Downloads');
+        let p;
+        try { p = this.loadSettings().downloadPath; } catch {}
+        if (!p || !path.isAbsolute(p)) return this._ensureDir(def);
+        if (fs.existsSync(p)) return p;
+        const parent = path.dirname(p);
+        if (parent && fs.existsSync(parent)) return this._ensureDir(p);
+        return this._ensureDir(def);
+    }
+
+    _ensureDir(p) {
+        try { fs.mkdirSync(p, { recursive: true }); } catch {}
+        return p;
+    }
+
+    _bin(name) {
+        const p = path.join(this.binDir, name + (IS_WIN ? '.exe' : ''));
+        return fs.existsSync(p) ? p : name;
+    }
+
+    _canonPath(p) {
+        let r;
+        try { r = path.resolve(p); } catch { return ''; }
+        return IS_WIN ? r.toLowerCase() : r;
+    }
+
+    isKnownPath(filepath) {
+        if (!filepath) return false;
+        const t = this._canonPath(filepath);
+        if (!t) return false;
+        for (const d of this.downloads.values()) {
+            for (const f of [d.filepath, ...(d.trackedFiles || [])]) {
+                if (f && this._canonPath(f) === t) return true;
+            }
+            if (d.outDir) {
+                const o = this._canonPath(d.outDir);
+                if (o && (t === o || t.startsWith(o + path.sep))) return true;
+            }
+        }
+        const dlDir = this._canonPath(this.resolveDownloadDir());
+        if (dlDir && (t === dlDir || t.startsWith(dlDir + path.sep))) return true;
+        return false;
+    }
+
     fetchInfo(url) {
         return new Promise(resolve => {
             const args = [
@@ -120,9 +165,7 @@ class Downloader {
     }
 
     checkExists(title) {
-        const settings = this.loadSettings();
-        let outDir = settings.downloadPath || path.join(os.homedir(), 'Downloads');
-        if (!path.isAbsolute(outDir)) outDir = path.join(os.homedir(), 'Downloads');
+        const outDir = this.resolveDownloadDir();
         if (!title || !fs.existsSync(outDir)) return null;
         try {
             for (const f of fs.readdirSync(outDir)) {
@@ -145,10 +188,7 @@ class Downloader {
         }
 
         const id = crypto.randomUUID().slice(0, 8);
-        const settings = this.loadSettings();
-        let outDir = settings.downloadPath || path.join(os.homedir(), 'Downloads');
-        if (!path.isAbsolute(outDir)) outDir = path.join(os.homedir(), 'Downloads');
-        if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+        const outDir = this.resolveDownloadDir();
 
         const args = [
             ...this.ytDlpBaseArgs, ...this._ffmpegArgs(),
@@ -158,12 +198,7 @@ class Downloader {
 
         if (replace) args.push('--force-overwrites');
 
-        if (qualityId === 'best') {
-            args.push('-f', 'bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best');
-            args.push('--merge-output-format', 'mp4');
-            args.push('--recode-video', 'mp4');
-            args.push('--postprocessor-args', 'VideoConvertor:-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart');
-        } else if (qualityId === 'audio') {
+        if (qualityId === 'audio') {
             args.push('-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0');
         } else if (qualityId.startsWith('res_')) {
             const h = parseInt(qualityId.split('_')[1], 10);
@@ -173,12 +208,9 @@ class Downloader {
                 args.push('-f', `bestvideo[vcodec^=avc1][height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}]+bestaudio/best[height<=${h}]`);
             }
             args.push('--merge-output-format', 'mp4');
-            args.push('--recode-video', 'mp4');
-            args.push('--postprocessor-args', 'VideoConvertor:-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart');
         } else {
-            args.push('-f', 'best');
-            args.push('--recode-video', 'mp4');
-            args.push('--postprocessor-args', 'VideoConvertor:-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart');
+            args.push('-f', 'bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best');
+            args.push('--merge-output-format', 'mp4');
         }
         args.push(url);
 
@@ -225,18 +257,21 @@ class Downloader {
 
         proc.on('close', code => {
             this.processes.delete(id);
-            if (dl.status !== 'cancelled') {
-                if (code === 0) {
+            if (dl.status === 'cancelled') { this.onUpdate(dl); return; }
+            if (code === 0) {
+                this._maybeReencode(dl, id, () => {
+                    if (dl.status === 'cancelled') { this.onUpdate(dl); return; }
                     dl.status = 'completed';
                     dl.progress = 100;
                     dl.eta = 0;
-                } else {
-                    dl.status = 'error';
-                    if (!dl.error) dl.error = `Download failed (exit code ${code})`;
-                    this._cleanup(dl);
-                }
+                    this.onUpdate(dl);
+                });
+            } else {
+                dl.status = 'error';
+                if (!dl.error) dl.error = `Download failed (exit code ${code})`;
+                this._cleanup(dl);
+                this.onUpdate(dl);
             }
-            this.onUpdate(dl);
         });
 
         proc.on('error', err => {
@@ -248,6 +283,55 @@ class Downloader {
         });
 
         return id;
+    }
+
+    _maybeReencode(dl, id, done) {
+        if (dl.status === 'cancelled') return done();
+        let editor;
+        try { editor = this.loadSettings().editorCompat; } catch {}
+        if (editor === false) return done();
+        if (dl.quality === 'audio' || !dl.filepath || !fs.existsSync(dl.filepath)) return done();
+        const ext = path.extname(dl.filepath).toLowerCase();
+        if (['.mp3', '.m4a', '.aac', '.opus', '.wav', '.flac'].includes(ext)) return done();
+
+        const ffprobe = this._bin('ffprobe');
+        const ffmpeg = this._bin('ffmpeg');
+        let codec = '';
+        try {
+            const r = spawnSync(ffprobe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'default=nw=1:nk=1', dl.filepath], { windowsHide: true, encoding: 'utf8', timeout: 30000 });
+            codec = (r.stdout || '').trim().toLowerCase();
+        } catch {}
+        if (!codec || codec === 'h264' || codec === 'avc1') return done();
+
+        dl.status = 'converting';
+        dl.progress = 100;
+        dl.eta = 0;
+        this.onUpdate(dl);
+
+        const src = dl.filepath;
+        const tmp = src + '.h264.mp4';
+        const args = ['-y', '-i', src, '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', tmp];
+        let proc;
+        try { proc = spawn(ffmpeg, args, { windowsHide: true }); }
+        catch { return done(); }
+        this.processes.set(id, proc);
+        if (!dl.trackedFiles.includes(tmp)) dl.trackedFiles.push(tmp);
+        proc.stderr.on('data', () => {});
+        proc.on('close', code => {
+            this.processes.delete(id);
+            if (dl.status === 'cancelled') {
+                try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch {}
+                return;
+            }
+            if (code === 0 && fs.existsSync(tmp)) {
+                try { fs.unlinkSync(src); fs.renameSync(tmp, src); }
+                catch { this._trackFile(tmp, dl); }
+            } else {
+                try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch {}
+            }
+            done();
+        });
+        proc.on('error', () => { this.processes.delete(id); done(); });
     }
 
     _killProc(proc) {

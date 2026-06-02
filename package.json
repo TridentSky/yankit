@@ -1,6 +1,6 @@
 {
   "name": "yankit",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Download videos and audio from YouTube, Twitter, TikTok, Instagram and 1000+ sites",
   "main": "main.js",
   "author": "Brando Silva",

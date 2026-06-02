@@ -148,6 +148,12 @@ app.whenReady().then(() => {
 
     const found = dl.init();
 
+    try {
+        const s = dl.loadSettings();
+        const eff = dl.resolveDownloadDir();
+        if (s.downloadPath !== eff) { s.downloadPath = eff; dl.saveSettings(s); }
+    } catch {}
+
     createWindow();
 
     if (!found) {
@@ -215,7 +221,7 @@ ipcMain.handle('pick-folder', async () => {
     try {
         const result = await dialog.showOpenDialog(mainWindow, {
             properties: ['openDirectory'],
-            defaultPath: dl.loadSettings().downloadPath,
+            defaultPath: dl.resolveDownloadDir(),
         });
         if (!result.canceled && result.filePaths.length > 0) {
             const s = dl.loadSettings();
@@ -229,29 +235,35 @@ ipcMain.handle('pick-folder', async () => {
 
 ipcMain.handle('open-file', async (_, filepath) => {
     try {
-        if (!filepath) return;
-        filepath = path.resolve(filepath);
-        const dlDir = path.resolve(dl.loadSettings().downloadPath);
-        if (!filepath.startsWith(dlDir + path.sep) && filepath !== dlDir) return;
-        if (fs.existsSync(filepath)) await shell.openPath(filepath);
-    } catch {}
+        if (!filepath || !dl.isKnownPath(filepath)) return { ok: false, reason: 'denied' };
+        const fp = path.resolve(filepath);
+        if (fs.existsSync(fp)) {
+            const err = await shell.openPath(fp);
+            return err ? { ok: false, reason: err } : { ok: true };
+        }
+        const dir = path.dirname(fp);
+        if (fs.existsSync(dir)) { await shell.openPath(dir); return { ok: false, reason: 'missing-file' }; }
+        return { ok: false, reason: 'missing-file' };
+    } catch (e) { return { ok: false, reason: e.message || 'error' }; }
 });
 
-ipcMain.handle('show-in-folder', (_, filepath) => {
+ipcMain.handle('show-in-folder', async (_, filepath) => {
     try {
-        if (!filepath) return;
-        filepath = path.resolve(filepath);
-        const dlDir = path.resolve(dl.loadSettings().downloadPath);
-        if (!filepath.startsWith(dlDir + path.sep) && filepath !== dlDir) return;
-        if (fs.existsSync(filepath)) shell.showItemInFolder(filepath);
-    } catch {}
+        if (!filepath || !dl.isKnownPath(filepath)) return { ok: false, reason: 'denied' };
+        const fp = path.resolve(filepath);
+        if (fs.existsSync(fp)) { shell.showItemInFolder(fp); return { ok: true }; }
+        const dir = path.dirname(fp);
+        if (fs.existsSync(dir)) { await shell.openPath(dir); return { ok: false, reason: 'missing-file' }; }
+        return { ok: false, reason: 'missing-file' };
+    } catch (e) { return { ok: false, reason: e.message || 'error' }; }
 });
 
-ipcMain.handle('open-folder', () => {
+ipcMain.handle('open-folder', async () => {
     try {
-        const dir = dl.loadSettings().downloadPath;
-        if (fs.existsSync(dir)) shell.openPath(dir);
-    } catch {}
+        const dir = dl.resolveDownloadDir();
+        const err = await shell.openPath(dir);
+        return err ? { ok: false, reason: err } : { ok: true };
+    } catch (e) { return { ok: false, reason: e.message || 'error' }; }
 });
 
 ipcMain.handle('open-url', (_, url) => {

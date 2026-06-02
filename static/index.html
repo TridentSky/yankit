@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self';">
     <title>Yankit Downloader</title>
     <link rel="icon" type="image/svg+xml" href="yankit.svg">
     <link rel="stylesheet" href="style.css">
@@ -140,6 +141,17 @@
                     <div class="setting-path">
                         <span id="downloadPath" class="path-text"></span>
                         <button id="changePath" class="text-btn">Change</button>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <div class="setting-toggle-row">
+                        <div class="setting-toggle-text">
+                            <label class="setting-label">Editor-compatible video (H.264)</label>
+                            <span class="setting-hint">Re-encodes only when needed so footage imports into Premiere, Resolve, etc. Slower for 4K/VP9.</span>
+                        </div>
+                        <button id="editorCompatToggle" class="switch" role="switch" aria-checked="true">
+                            <span class="switch-knob"></span>
+                        </button>
                     </div>
                 </div>
                 <div class="setting-group">

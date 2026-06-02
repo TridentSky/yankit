@@ -181,9 +181,10 @@ const server = http.createServer(async (req, res) => {
     }
 });
 
-server.listen(PORT, () => {
+const HOST = process.env.HOST || '127.0.0.1';
+server.listen(PORT, HOST, () => {
     console.log(`\n  Yankit Downloader v${PKG_VERSION}`);
-    console.log(`  Running at http://localhost:${PORT}\n`);
+    console.log(`  Running at http://${HOST}:${PORT}\n`);
 });
 
 process.on('SIGINT', () => { dl.cleanupAll(); process.exit(); });
